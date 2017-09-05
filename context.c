@@ -156,7 +156,7 @@ context_resume_zombie(context_t *cxt)
     return 0;
 }
 
-#define DEBUG_CONTEXT
+// #define DEBUG_CONTEXT
 #ifdef  DEBUG_CONTEXT
 
 context_t *cxt;
@@ -223,6 +223,8 @@ void test(){
 uint64_t
 yieldable(context_t *cxt)
 {
+    YIELD_INIT(cxt);
+
     for ( int i = 12; i < 23; i++ ){
         printf("hello i = %d\n", i);
         YIELD(cxt, i);
@@ -235,9 +237,9 @@ yieldable(context_t *cxt)
 void test_yield(){
     context_t *cxt = context_create();
 
-    uint64_t r = yieldable(cxt);
+    yieldable(cxt);
 
-    printf("r = %llu\n", r);
+    uint64_t r;
     while ( (r = GETYIELD(cxt)) != YIELDABLDEND ){
         printf("r = %llu\n", r);
     }

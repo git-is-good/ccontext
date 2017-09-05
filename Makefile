@@ -1,6 +1,6 @@
 TARGETS := test
 HEADERS := context.h
-OBJS := context.o 
+OBJS := context.o test.o
 
 BUILDFLAGS := 
 ifeq ($(DEBUG), 1)

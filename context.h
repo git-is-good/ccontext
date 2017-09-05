@@ -48,6 +48,7 @@ uint64_t context_save(context_t *cxt, uint64_t frame_start);
 
 void context_resume(context_t *cxt, uint64_t real_frame_start);
 
+#define YIELD_INIT(cxt) YIELD(cxt, 0)
 
 #define YIELD(cxt, res)                         \
         do {                                    \
