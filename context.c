@@ -82,7 +82,6 @@ context_save(context_t *cxt, uint64_t frame_start)
     return 0;
 }
 
-#define MAXOFTWO(a, b) ((a) < (b) ? (b) : (a))
 
 void
 _context_resume(context_t *cxt, uint64_t real_frame_start)
@@ -125,6 +124,9 @@ _context_resume(context_t *cxt, uint64_t real_frame_start)
         );
 } 
 
+#define MAXOFTWO(a, b)      ((a) < (b) ? (b) : (a))
+#define ROUNDUP(p, base)    ((p + base - 1) / base * base)
+
 void
 context_resume(context_t *cxt, uint64_t real_frame_start)
 {
@@ -133,7 +135,9 @@ context_resume(context_t *cxt, uint64_t real_frame_start)
     uint64_t rsp;
     CONTEXT_READ_RSP(rsp);
 
-    size_t bufsz = MAXOFTWO(cxt->frame_len - (real_frame_start - rsp) , 0) + 256;
+    size_t bufsz = MAXOFTWO(cxt->frame_len - (real_frame_start - rsp) , 0);
+    /* 64 bytes alignment */
+    bufsz = ROUNDUP(bufsz, 64) + 256;
 
     asm ( "subq     %0, %%rsp\n"
         : "=r"(bufsz)
