@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <time.h>
 
-const size_t testsz = 1000;
+const size_t testsz = 100000;
 
 uint64_t
 prime_generator(context_t *cxt)
@@ -60,18 +60,18 @@ prime_generator2()
     }
 }
 int main(){
-    // time_t st = clock();
-    // prime_generator2();
-    // printf("prime_generator2: %ld\n", clock() - st);
+    time_t st = clock();
+    prime_generator2();
+    printf("prime_generator2: %ld\n", clock() - st);
 
     context_t *cxt = context_create();
     prime_generator(cxt);
 
-    // st = clock();
+    st = clock();
     for ( size_t i = 0; i < testsz; i++ ){
         uint64_t p = GETYIELD(cxt);
         printf("p[%lu] = %llu\n", i, p);
     }
-    // printf("prime_generator: %ld\n", clock() - st);
+    printf("prime_generator: %ld\n", clock() - st);
 }
 
