@@ -23,15 +23,15 @@ context_destroy(context_t *cxt)
 uint64_t
 context_save(context_t *cxt, uint64_t frame_start)
 {
-    uint64_t rsp;
+    uint64_t rbp;
 
-    CONTEXT_READ_RSP(rsp);
-    cxt->frame_len = frame_start - rsp;
+    CONTEXT_READ_RBP(rbp);
+    cxt->frame_len = frame_start - rbp;
 
     /* cxt->call_frame is an old valid one, or NULL */
     free(cxt->call_frame);
     cxt->call_frame = (uint8_t*) malloc(cxt->frame_len);
-    memcpy(cxt->call_frame, (void*)rsp, cxt->frame_len);
+    memcpy(cxt->call_frame, (void*)rbp, cxt->frame_len);
 
     asm ( "movq  %0, %%rax"
         : /* no output */
@@ -44,17 +44,8 @@ context_save(context_t *cxt, uint64_t frame_start)
           "pushfq\n"
           "pop      128(%rax)\n"
           
-          /* we don't save rax */
           "movq     %rbx,   8(%rax)\n"
 
-          /* rcx - r9 is for passing arguments */
-          /* so meaningless for the caller */
-          // "movq     %rcx,   16(%rax)\n"
-          // "movq     %rdx,   24(%rax)\n"
-          // "movq     %rsi,   32(%rax)\n"
-          // "movq     %rdi,   40(%rax)\n"
-          // "movq     %r8,    48(%rax)\n"
-          // "movq     %r9,    56(%rax)\n"
           "movq     %r10,   64(%rax)\n"
           "movq     %r11,   72(%rax)\n"
           "movq     %r12,   80(%rax)\n"
@@ -62,7 +53,6 @@ context_save(context_t *cxt, uint64_t frame_start)
           "movq     %r14,   96(%rax)\n"
           "movq     %r15,   104(%rax)\n"
 
-          // "movq     %rsp,   112(%rax)\n"
           "movq     %rbp,   120(%rax)\n"
 
           /* save rip right before ret */
@@ -76,7 +66,8 @@ context_save(context_t *cxt, uint64_t frame_start)
 
           /* leave this function */
           /* this is the address for the saved rip */
-          /* note we don't need to save rsp pointer, because it's immediately changed after return to lb3 */
+          /* note we don't need to save rsp pointer,
+           * because it's immediately changed after return to lb3 */
           "lb3:\n"
           "movq     %rbp,   %rsp\n"
           "pop      %rbp\n"
@@ -93,14 +84,6 @@ _context_resume(context_t *cxt, uint64_t real_frame_start)
 {
     memcpy((void*)(real_frame_start - cxt->frame_len), cxt->call_frame, cxt->frame_len);
 
-    /* rsp should be ajusted according to the difference between old and new frame_start */
-    /* but we don't need to do so, because this rsp is useless, see `context_save` */
-    // uint64_t nrsp = real_frame_start + cxt->frame_len;
-    // asm ( "movq     %0,     %%rsp"
-    //     : /* no output */
-    //     : "r"(nrsp)
-    //     : );
- 
     asm ( "movq     %0,     %%rax"
         : /* no output */
         : "r"(cxt)
@@ -112,12 +95,7 @@ _context_resume(context_t *cxt, uint64_t real_frame_start)
           "popfq\n"
 
           "movq     8(%rax),    %rbx\n"
-          // "movq     16(%rax),   %rcx\n"
-          // "movq     24(%rax),   %rdx\n"
-          // "movq     32(%rax),   %rsi\n"
-          // "movq     40(%rax),   %rdi\n"
-          // "movq     48(%rax),   %r8\n"
-          // "movq     56(%rax),   %r9\n"
+
           "movq     64(%rax),   %r10\n"
           "movq     72(%rax),   %r11\n"
           "movq     80(%rax),   %r12\n"
