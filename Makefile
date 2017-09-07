@@ -4,7 +4,7 @@ OBJS := context.o test.o
 
 BUILDFLAGS := 
 ifeq ($(DEBUG), 1)
-	BUILDFLAGS += -g
+	BUILDFLAGS += -g -DDEBUG_CONTEXT
 endif
 
 all: $(TARGETS)

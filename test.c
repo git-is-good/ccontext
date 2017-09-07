@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <time.h>
 
-const size_t testsz = 100000;
+const size_t testsz = 1000;
 
 uint64_t
 prime_generator(context_t *cxt)
@@ -59,7 +59,10 @@ prime_generator2()
         }
     }
 }
-int main(){
+
+void
+test1()
+{
     time_t st = clock();
     prime_generator2();
     printf("prime_generator2: %ld\n", clock() - st);
@@ -73,5 +76,43 @@ int main(){
         printf("p[%lu] = %llu\n", i, p);
     }
     printf("prime_generator: %ld\n", clock() - st);
+    context_destroy(cxt);
+
+#ifdef DEBUG_CONTEXT
+    void context_inline_test();
+    context_inline_test();
+#endif /* DEBUG_CONTEXT */
+
+}
+
+/* test for different frame_start */
+
+void
+_dump_test2(int i, context_t *cxt)
+{
+    void *rbp;
+    CONTEXT_READ_RBP(rbp);
+    printf("frame_start at %p...", rbp);
+
+    uint64_t p = GETYIELD(cxt);
+    printf("prime = %llu\n", p);
+
+    if ( i > 0 ) _dump_test2(i - 1, cxt);
+}
+
+
+void
+test2()
+{
+    context_t *cxt = context_create();
+    prime_generator(cxt);
+
+    _dump_test2(10, cxt);
+    context_destroy(cxt);
+}
+
+int main(){
+    test1();
+    test2();
 }
 

@@ -5,11 +5,21 @@
 #include <string.h>
 #include <assert.h>
 
+/* glibc stack convention */
+#define STACK_ALIGN_BYTES   16
+
+/* v should be as simple as a straightforward address 
+ * such that the compiler can load it in rdi in one 
+ * instruction without interfering with other registers */
+#define CONTEXT_WRITE_RBP(v)   asm ("movq %0, %%rbp" : : "D"(v));
+#define CONTEXT_WRITE_RAX(v)   asm ("movq %0, %%rax" : : "D"(v));
+
 context_t*
 context_create()
 {
     context_t *res = (context_t*) malloc(sizeof(context_t));
     res->call_frame = NULL;
+    res->frame_len  = 0;
     return res;
 }
 
@@ -24,19 +34,21 @@ uint64_t
 context_save(context_t *cxt, uint64_t frame_start)
 {
     uint64_t rbp;
-
     CONTEXT_READ_RBP(rbp);
-    cxt->frame_len = frame_start - rbp;
 
-    /* cxt->call_frame is an old valid one, or NULL */
-    free(cxt->call_frame);
-    cxt->call_frame = (uint8_t*) malloc(cxt->frame_len);
+    cxt->frame_start = frame_start;
+
+    size_t nframe_len = frame_start - rbp;
+    if ( nframe_len != cxt->frame_len ){
+        if ( cxt->frame_len < nframe_len ){
+            free(cxt->call_frame);
+            cxt->call_frame = (uint8_t*) malloc(nframe_len);
+        }
+        cxt->frame_len = nframe_len;
+    }
     memcpy(cxt->call_frame, (void*)rbp, cxt->frame_len);
 
-    asm ( "movq  %0, %%rax"
-        : /* no output */
-        : "r"(cxt)
-        : );
+    CONTEXT_WRITE_RAX(cxt);
     
     /* pure assembly starts, do not use C variable any more */
     asm ( 
@@ -45,15 +57,12 @@ context_save(context_t *cxt, uint64_t frame_start)
           "pop      128(%rax)\n"
           
           "movq     %rbx,   8(%rax)\n"
-
           "movq     %r10,   64(%rax)\n"
           "movq     %r11,   72(%rax)\n"
           "movq     %r12,   80(%rax)\n"
           "movq     %r13,   88(%rax)\n"
           "movq     %r14,   96(%rax)\n"
           "movq     %r15,   104(%rax)\n"
-
-          "movq     %rbp,   120(%rax)\n"
 
           /* save rip right before ret */
           "jmp      lb1\n"
@@ -82,12 +91,20 @@ context_save(context_t *cxt, uint64_t frame_start)
 void
 _context_resume(context_t *cxt, uint64_t real_frame_start)
 {
-    memcpy((void*)(real_frame_start - cxt->frame_len), cxt->call_frame, cxt->frame_len);
+    uint64_t nrbp = real_frame_start - cxt->frame_len;
+    memcpy((void*)nrbp, cxt->call_frame, cxt->frame_len);
 
-    asm ( "movq     %0,     %%rax"
-        : /* no output */
-        : "r"(cxt)
-        : );
+    /* adjust all rbp values involved */
+    uint64_t cur_shi = 0;
+    while ( cur_shi != cxt->frame_len ){
+        uint64_t old_value = *(uint64_t*)(cxt->call_frame + cur_shi);
+        *(uint64_t*)(nrbp + cur_shi) = old_value + (real_frame_start - cxt->frame_start);
+        cur_shi = *(uint64_t*)(cur_shi + cxt->call_frame) - (cxt->frame_start - cxt->frame_len);
+    }
+
+    CONTEXT_WRITE_RAX(cxt);
+
+    CONTEXT_WRITE_RBP(nrbp);
 
     asm (
           /* now restore assigned rflags */
@@ -95,15 +112,12 @@ _context_resume(context_t *cxt, uint64_t real_frame_start)
           "popfq\n"
 
           "movq     8(%rax),    %rbx\n"
-
           "movq     64(%rax),   %r10\n"
           "movq     72(%rax),   %r11\n"
           "movq     80(%rax),   %r12\n"
           "movq     88(%rax),   %r13\n"
           "movq     96(%rax),   %r14\n"
           "movq     104(%rax),  %r15\n"
-                              
-          "movq     120(%rax),  %rbp\n"
 
           /* restore rip */
           "push     136(%rax)\n"
@@ -124,8 +138,7 @@ context_resume(context_t *cxt, uint64_t real_frame_start)
     CONTEXT_READ_RSP(rsp);
 
     size_t bufsz = MAXOFTWO(cxt->frame_len - (real_frame_start - rsp) , 0);
-    /* 64 bytes alignment */
-    bufsz = ROUNDUP(bufsz, 64) + 256;
+    bufsz = ROUNDUP(bufsz, STACK_ALIGN_BYTES) + 256;
 
     asm ( "subq     %0, %%rsp\n"
         : "=r"(bufsz)
@@ -151,12 +164,12 @@ context_resume_zombie(context_t *cxt)
 // #define DEBUG_CONTEXT
 #ifdef  DEBUG_CONTEXT
 
-context_t *cxt;
-uint64_t frame_start;
+static context_t *cxt;
+static uint64_t frame_start;
 
-int cond1, cond2;
+static int cond1, cond2;
 
-int
+static int
 show_msg()
 {
     printf("show_msg running...\n");
@@ -189,7 +202,9 @@ show_msg()
     return 0;
 }
 
-void test(){
+static void
+test()
+{
     CONTEXT_READ_RBP(frame_start);
     cxt = context_create();
 
@@ -212,7 +227,7 @@ void test(){
 
 #define YIELDABLDEND        1000
 
-uint64_t
+static uint64_t
 yieldable(context_t *cxt)
 {
     YIELD_INIT(cxt);
@@ -226,7 +241,9 @@ yieldable(context_t *cxt)
     return YIELDABLDEND;
 }
 
-void test_yield(){
+static void
+test_yield()
+{
     context_t *cxt = context_create();
 
     yieldable(cxt);
@@ -238,7 +255,9 @@ void test_yield(){
     printf("end of test_yield...\n");
 }
 
-int main(){
+void
+context_inline_test()
+{
     test();
     printf("*********\n");
     test_yield();
